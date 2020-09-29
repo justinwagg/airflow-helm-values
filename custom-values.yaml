@@ -1,0 +1,398 @@
+###################################
+# Airflow - Common Configs
+###################################
+airflow:
+  image:
+    repository: justinmwagg/airflow
+    tag: 1.10.12-armv7
+    ## values: Always or IfNotPresent
+    pullPolicy: IfNotPresent
+    pullSecret: ""
+
+  executor: KubernetesExecutor
+  config:
+    AIRFLOW__KUBERNETES__WORKER_CONTAINER_REPOSITORY: "justinmwagg/airflow"
+    AIRFLOW__KUBERNETES__WORKER_CONTAINER_TAG: "1.10.12-armv7"
+    AIRFLOW__KUBERNETES__WORKER_CONTAINER_IMAGE_PULL_POLICY: "IfNotPresent"
+    AIRFLOW__KUBERNETES__WORKER_PODS_CREATION_BATCH_SIZE: "1"
+    AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "True"
+    AIRFLOW__KUBERNETES__LOGS_VOLUME_CLAIM: "airflow-logs-pvc"
+    AIRFLOW__KUBERNETES__GIT_REPO: "git@github.com:justinwagg/airflow-turingpi-dags.git"
+    AIRFLOW__KUBERNETES__GIT_BRANCH: "master"
+    AIRFLOW__KUBERNETES__GIT_DAGS_FOLDER_MOUNT_POINT: "/opt/airflow/dags"
+    AIRFLOW__KUBERNETES__DAGS_VOLUME_MOUNT_POINT: "/opt/airflow/dags"
+    AIRFLOW__KUBERNETES__GIT_SYNC_CONTAINER_REPOSITORY: "k8s.gcr.io/git-sync/git-sync"
+    AIRFLOW__KUBERNETES__GIT_SYNC_CONTAINER_TAG: "v3.1.7"
+    AIRFLOW__KUBERNETES__DELETE_WORKER_PODS: "True"
+    AIRFLOW__KUBERNETES__DELETE_WORKER_PODS_ON_FAILURE: "False"
+    # The parameter AIRFLOW__KUBERNETES__DAGS_VOLUME_SUBPATH should be 
+    # also given with the value "repo/" since git_sync_dest is by default set to "repo" 
+    # otherwise the DAGs won't be found.
+    AIRFLOW__KUBERNETES__DAGS_VOLUME_SUBPATH: "repo/"
+    AIRFLOW__KUBERNETES__GIT_SSH_KEY_SECRET_NAME: "git-sync-ssh-key"
+    AIRFLOW__KUBERNETES__NAMESPACE: "airflow"
+    AIRFLOW__KUBERNETES__RUN_AS_USER: "50000"
+    AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+    AIRFLOW__CORE__LOAD_DEFAULT_CONNECTIONS: "False"
+    AIRFLOW__CORE__LOGGING_LEVEL: INFO
+    AIRFLOW__SCHEDULER__DAG_DIR_LIST_INTERVAL: "60"
+    AIRFLOW__KUBERNETES__WORKER_SERVICE_ACCOUNT_NAME: "airflow"
+    AIRFLOW__KUBERNETES__KUBE_CLIENT_REQUEST_ARGS: '{\"_request_timeout\":[60, 60]}'
+
+  extraEnv:
+    - name: AIRFLOW__CORE__FERNET_KEY
+      valueFrom:
+        secretKeyRef:
+          name: airflow-fernet-key
+          key: value
+
+###################################
+# Airflow - Scheduler Configs
+###################################
+scheduler:
+  safeToEvict: true
+  podDisruptionBudget:
+    enabled: true
+    ## the maximum unavailable pods/percentage for the scheduler
+    ##
+    ## NOTE:
+    ## - as there is only ever a single scheduler Pod,
+    ##   this must be 100% for Kubernetes to be able to migrate it
+    ##
+    maxUnavailable: "100%"
+    minAvailable: ""
+
+  ## custom airflow connections for the airflow scheduler
+  ##
+  ## NOTE:
+  ## - connections are created with a script that is stored in a K8s secret and mounted into the scheduler container
+  ##
+  ## EXAMPLE:
+  ##   connections:
+  ##     - id: my_aws
+  ##       type: aws
+  ##       extra: |
+  ##         {
+  ##           "aws_access_key_id": "XXXXXXXXXXXXXXXXXXX",
+  ##           "aws_secret_access_key": "XXXXXXXXXXXXXXX",
+  ##           "region_name":"eu-central-1"
+  ##         }
+  ##
+  connections: []
+
+  ## if we remove before adding a connection resulting in a refresh
+  ##
+  refreshConnections: true
+
+  ## custom airflow variables for the airflow scheduler
+  ##
+  ## NOTE:
+  ## - THIS IS A STRING, containing a JSON object, with your variables in it
+  ##
+  ## EXAMPLE:
+    # variables: |
+    #   { "environment": "dev" }
+  ##
+  variables: |
+    { "environment": "dev" }
+
+  ## the value of the `airflow --num_runs` parameter used to run the airflow scheduler
+  ##
+  ## NOTE:
+  ## - this is the number of 'dag refreshes' before the airflow scheduler process will exit
+  ## - if not set to `-1`, the scheduler Pod will restart regularly
+  ## - for most environments, `-1` will be an acceptable value
+  ##
+  numRuns: -1
+
+  ## if we run `airflow initdb` when the scheduler starts
+  ##
+  initdb: true
+
+  ## if we run `airflow initdb` inside a special initContainer
+  ##
+  ## NOTE:
+  ## - may be needed if you have custom database hooks configured that will be pulled in by git-sync
+  ##
+  preinitdb: false
+  initialStartupDelay: 0
+  livenessProbe:
+    enabled: true
+    ## the number of seconds to wait before checking pod health
+    ##
+    ## NOTE:
+    ## - make larger if you are installing many packages with:
+    ##   `airflow.extraPipPackages`, `web.extraPipPackages`, or `dags.installRequirements`
+    ##
+    initialDelaySeconds: 300
+    periodSeconds: 30
+    failureThreshold: 5
+
+###################################
+# Airflow - WebUI Configs
+###################################
+  web:
+  replicas: 1
+  safeToEvict: true
+  service:
+    annotations: {}
+    sessionAffinity: "None"
+    sessionAffinityConfig: {}
+    type: ClusterIP
+    externalPort: 8080
+    loadBalancerIP: ""
+    loadBalancerSourceRanges: []
+    nodePort:
+      http: ""
+  baseUrl: "http://localhost:8080"
+  serializeDAGs: false
+  initialStartupDelay: 0
+  minReadySeconds: 5
+  readinessProbe:
+    enabled: false
+    scheme: HTTP
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    timeoutSeconds: 1
+    successThreshold: 1
+    failureThreshold: 3
+  livenessProbe:
+    enabled: true
+    scheme: HTTP
+    initialDelaySeconds: 300
+    periodSeconds: 30
+    timeoutSeconds: 3
+    successThreshold: 1
+    failureThreshold: 2
+  secretsDir: /var/airflow/secrets
+  secrets: []
+  secretsMap:
+
+###################################
+# Airflow - Worker Configs
+###################################
+workers:
+  enabled: false
+
+###################################
+# Airflow - Flower Configs
+###################################
+flower:
+  enabled: false
+
+  ###################################
+# Airflow - Logs Configs
+###################################
+logs:
+  ## the airflow logs folder
+  ##
+  path: /opt/airflow/logs
+
+  ## configs for the logs PVC
+  ##
+  persistence:
+    ## if a persistent volume is mounted at `logs.path`
+    ##
+    enabled: true
+
+    ## the name of an existing PVC to use
+    ##
+    existingClaim: "airflow-logs-pvc"
+    subPath: ""
+    storageClass: ""
+    accessMode: ReadWriteMany
+    size: 1Gi
+
+###################################
+# Airflow - DAGs Configs
+###################################
+dags:
+  ## the airflow dags folder
+  ##
+  path: /opt/airflow/dags
+  doNotPickle: false
+
+  ## install any Python `requirements.txt` at the root of `dags.path` automatically
+  ##
+  ## WARNING:
+  ## - if set to true, and you are using `dags.git.gitSync`, you must also enable
+  ## `dags.initContainer` to ensure the requirements.txt is available at Pod start
+  ##
+  installRequirements: false
+  persistence:
+    enabled: false
+  git:
+    url: "git@github.com:justinwagg/airflow-turingpi-dags.git"
+    ## the branch/tag/sha1 which we clone
+    ref: master
+
+    ## the name of a pre-created secret containing files for ~/.ssh/
+    ##
+    ## NOTE:
+    ## - this is ONLY RELEVANT for SSH git repos
+    ## - the secret commonly includes files: id_rsa, id_rsa.pub, known_hosts
+    ## - known_hosts is NOT NEEDED if `git.sshKeyscan` is true
+    ##
+    secret: "git-sync-ssh-key"
+    sshKeyscan: false
+    privateKeyName: id_rsa
+    repoHost: ""
+    repoPort: 22
+    gitSync:
+      enabled: true
+      resources: {}
+      image:
+        repository: justinmwagg/alpine-git
+        tag: arm
+        pullPolicy: IfNotPresent
+      refreshTime: 60
+
+  ## configs for the git-clone container
+  ##
+  ## NOTE:
+  ## - use this container if you want to only clone the external git repo
+  ##   at Pod start-time, and not keep it synchronised afterwards
+  ##
+  initContainer:
+    enabled: true
+    resources: {}
+    image:
+      repository: justinmwagg/alpine-git
+      tag: arm
+      pullPolicy: IfNotPresent
+    mountPath: "/opt/airflow/dags"
+    syncSubPath: ""
+
+###################################
+# Kubernetes - Ingress Configs
+###################################
+ingress:
+  enabled: false
+
+###################################
+# Kubernetes - RBAC
+###################################
+rbac:
+  ## if Kubernetes RBAC resources are created
+  ##
+  ## NOTE:
+  ## - these allow the service account to create/delete Pods in the airflow namespace,
+  ##   which is required for the KubernetesPodOperator() to function
+  ##
+  create: true
+
+  ## if the created RBAC Role has GET/LIST on Event resources
+  ##
+  ## NOTE:
+  ## - this is needed for KubernetesPodOperator() to use `log_events_on_failure=True`
+  ##
+  events: true
+
+###################################
+# Kubernetes - Service Account
+###################################
+serviceAccount:
+  create: true
+  name: "airflow"
+  annotations: {}
+
+###################################
+# Kubernetes - Extra Manifests
+###################################
+## additional Kubernetes manifests to include with this chart
+##
+## EXAMPLE:
+##   extraManifests:
+##    - apiVersion: cloud.google.com/v1beta1
+##      kind: BackendConfig
+##      metadata:
+##        name: "{{ .Release.Name }}-test"
+##      spec:
+##        securityPolicy:
+##          name: "gcp-cloud-armor-policy-test"
+##
+extraManifests: []
+
+###################################
+# Database - PostgreSQL Chart
+# - https://github.com/helm/charts/tree/master/stable/postgresql
+###################################
+postgresql:
+  enabled: false
+
+###################################
+# Database - External Database
+# - these configs are only used when `postgresql.enabled` is false
+###################################
+externalDatabase:
+  type: postgres
+  host: 192.168.1.108
+  port: 6543
+  database: airflow
+  user: airflow
+  passwordSecret: "postgresql-password"
+  passwordSecretKey: "password"
+  properties: ""
+
+###################################
+# Database - Redis Chart
+# - https://github.com/helm/charts/tree/master/stable/redis
+###################################
+redis:
+  enabled: false
+
+###################################
+# Prometheus - ServiceMonitor
+###################################
+serviceMonitor:
+  ## if the ServiceMonitor resources should be deployed
+  ##
+  ## WARNING:
+  ## - you will need an exporter in your airflow docker container, for example:
+  ##   https://github.com/epoch8/airflow-exporter
+  ##
+  ## NOTE:
+  ## - you can install pip packages with `airflow.extraPipPackages`
+  ## - ServiceMonitor is a resource from: https://github.com/coreos/prometheus-operator
+  ##
+  enabled: false
+
+  ## labels for ServiceMonitor, so that Prometheus can select it
+  ##
+  selector:
+    prometheus: kube-prometheus
+
+  ## the ServiceMonitor web endpoint path
+  ##
+  path: /admin/metrics
+
+  ## the ServiceMonitor web endpoint interval
+  ##
+  interval: "30s"
+
+###################################
+# Prometheus - PrometheusRule
+###################################
+prometheusRule:
+  ## if the PrometheusRule resources should be deployed
+  ##
+  ## WARNING:
+  ## - you will need an exporter in your airflow docker container, for example:
+  ##   https://github.com/epoch8/airflow-exporter
+  ##
+  ## NOTE:
+  ## - you can install pip packages with `airflow.extraPipPackages`
+  ## - PrometheusRule a resource from: https://github.com/coreos/prometheus-operator
+  ##
+  enabled: false
+
+  ## labels for PrometheusRule, so that Prometheus can select it
+  ##
+  additionalLabels: {}
+
+  ## alerting rules for Prometheus
+  ##
+  ## NOTE:
+  ## - documentation: https://prometheus.io/docs/prometheus/latest/configuration/alerting_rules/
+  ##
+  groups: []
