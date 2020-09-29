@@ -64,4 +64,4 @@ A this point you should be able to get the Web UI port by running
 sudo kubectl get svc -n airflow -o wide
 ```
 
-and grabbing the `service/airflow-webserver` PORT value and going to http://<YOUR_MASTER_IP>:<PORT>.
+and grabbing the `service/airflow-webserver` PORT value and going to `http://<YOUR_MASTER_IP>:<PORT>`.
