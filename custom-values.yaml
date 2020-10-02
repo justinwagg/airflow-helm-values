@@ -46,6 +46,16 @@ airflow:
           name: airflow-fernet-key
           key: value
 
+  extraVolumes:
+    - name: airflow-work-dir
+      nfs: 
+        server: 192.168.1.108
+        path: /volume1/airflow-prod-work-dir  
+  
+  extraVolumeMounts:
+    - name: airflow-work-dir
+          mountPath: /var/airflow-work-dir
+
 ###################################
 # Airflow - Scheduler Configs
 ###################################
